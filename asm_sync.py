@@ -24,6 +24,7 @@ inventory_columns = [
 
 keyword_tags = ['Scan Name']
 inventory_tags = ['ipgeo.asn']
+inventory_tags = []
 
 
 class ASM:
@@ -54,7 +55,7 @@ class ASM:
         # tag_tuples = [(f'bd.tag_{tag["id"]}_keyword', tag["name"]) for tag in asm_tags if tag['name'] in allow_tags]
         return dict([(f'bd.tag_{tag["id"]}_keyword', tag["name"]) for tag in asm_tags if tag['name'] in keyword_tags])
 
-    def get_asm_inventory_records(self):    
+    def get_asm_inventory_records(self, limit=75):    
         # get ASM keyword tags to include in the inventory columns
         tags = self.get_asm_tags()
         tag_columns = [f'bd.tag_{tag["id"]}_keyword' for tag in tags if tag['value_type'] == 'keyword']
@@ -65,8 +66,7 @@ class ASM:
         a_records= [
             {'column': 'bd.record_type', 'type': 'is', 'value': 'A'}
         ]
-
-        inventory = self.get_inventory(column_list, offset=0, limit=5000, filters=a_records) 
+        inventory = self.get_inventory(column_list, offset=0, limit=limit, filters=a_records) 
 
         asm_data = pd.DataFrame.from_records(inventory['assets'])
         columns = keyword_tags + ['bd.ip_address']
@@ -79,17 +79,6 @@ class ASM:
             print(f'{str(e)} keyword tag not defined in ASM data')
         return asm_data
 
-    # def get_asm_tagged_a_records(self) -> pd.DataFrame:
-    #     # create lookup dict for renaming tag columns to readable tag names (from bd.tag_<ID>_keyword) 
-    #     tags_by_id = self.create_tag_lookup()
-    #     inventory = self.get_asm_inventory_records()
-    #     asm_data = pd.DataFrame.from_records(inventory['assets'])
-    #     columns = allow_tags + ['bd.ip_address']
-    #     try:
-    #         asm_data = asm_data.rename(columns=tags_by_id)[columns]
-    #     except KeyError as e:
-    #         print(f'{str(e)} keyword tags missing in ASM data')
-    #     return asm_data
 
 class TVM:
 
@@ -110,19 +99,22 @@ class TVM:
         return {asset['ipv4s'][0]: asset['id'] for asset in self.tio.exports.assets(sources=[self.source])}
 
     def import_discovered_assets(self, asm_df):
-        discovered_ips = asm_df[asm_df['uuid'].isna()]['bd.ip_address']
+        now = int(time.time())
+        discovered_ips = asm_df[asm_df['uuid'].isna()]
+        discovered_ips.to_csv(f'{now}_discovered_ips.csv')
+        if len(discovered_ips) == 0:
+            print('no new ASM assets to import')
+            return
+
         print(f'importing {len(discovered_ips)} ASM assets not found TVM ...')
-        # parse inventory records into asset import format
-        # asset_records = [transform_parameters(record) for record in assets]
+
         asset_records = list(self.map_parameters(discovered_ips))
     
-        tio = TenableIO()
-        job_id = tio.assets.asset_import(self.source, *asset_records)
-        print(f"importing {len(asset_records)} assets job id: {job_id}")
+        job_id = self.tio.assets.asset_import(self.source, *asset_records)
     
         while True:
             # poll for status until job complete
-            job = tio.assets.import_job_details(job_id)
+            job = self.tio.assets.import_job_details(job_id)
             if job['status'] == 'COMPLETE':
                 print(f'import complete for job id: {job_id}')
                 print(job)
@@ -143,9 +135,16 @@ class TVM:
     def update_tags(self, asm_df):
         ''' this needs to be reworked to apply more than one tag_value at a time'''
         asm_attributes = keyword_tags + inventory_tags
-        for tag_category in keyword_tags:
+        for tag_category in asm_attributes:
             # get a list of unique values for this category
-            tag_values = asm_df[tag_category].unique()
+            # tag_values = list(asm_df[tag_category].unique())
+            # tag_values = asm_df[tag_category].unique()
+            # tag_values = [value for value in  if value]
+
+            # create a 'non_empty' mask to filter out empty values
+            non_empty = ~asm_df[tag_category].isna()
+            tag_values = list(asm_df[non_empty][tag_category].unique())
+
             # get a dictionary to translate tag_value to tio tag_uuid, tags are created if needed
             tag_uuid_lookup = self.tag_uuids(tag_category, tag_values)
     
@@ -155,10 +154,7 @@ class TVM:
                 df = asm_df[asm_df[tag_category] == tag_value]
                 asset_uuids = list(df.uuid)
                 tag_uuid = tag_uuid_lookup[tag_value]
-                self.tio.tags.assign(asset_uuids, [tag_uuid])
-                
-                print('tag_uuid', tag_uuid)
-                print(f'tagging {len(df.uuid)} assets with {tag_category}:{tag_value}')
+                print(f'applying tag {tag_category}:{tag_value} to {len(asset_uuids)} assets')
                 self.tio.tags.assign(asset_uuids, [tag_uuid])
 
 
@@ -167,7 +163,7 @@ def correlate_records():
         tvm = TVM(tio=TenableIO(), source='SPartners')
         asm = ASM(asm_token=SP_ASM_TOKEN)
 
-        asm_df = asm.get_asm_tagged_a_records()
+        asm_df = asm.get_asm_inventory_records()
     
         uuid_lookup = tvm.asset_uuids()
         
@@ -176,13 +172,11 @@ def correlate_records():
     
         # import any ASM records that have not been assigned a tenable UUID (not yet scanned)
         tvm.import_discovered_assets(asm_df)
-
-        
-
-
+        tvm.update_tags(asm_df)
 
         matching_uuids = asm_df[~asm_df['uuid'].isna()]['bd.ip_address']
         print(f'{len(matching_uuids)} ASM IPs with an asset uuid')
+
         return asm_df
 
 
