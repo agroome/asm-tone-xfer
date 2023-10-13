@@ -12,9 +12,7 @@ load_dotenv()
 
 JOB_POLL = os.getenv('JOB_POLL', 5)
 
-TENB_ASM_TOKEN = os.getenv('TENB_ASM_TOKEN')
-SP_ASM_TOKEN = os.getenv('SP_ASM_TOKEN')
-BB_ASM_TOKEN = os.getenv('BB_ASM_TOKEN')
+ASM_TOKEN = os.getenv('ASM_TOKEN')
 
 inventory_columns = [
     'bd.ip_address', 'ports.ports', 'bd.original_hostname', 'bd.host', 'screenshot.finalurl', 
@@ -163,14 +161,15 @@ class TVM:
 def correlate_records(tvm, asm):
         asm_df = asm.get_asm_inventory_records()
     
-        uuid_lookup = tvm.asset_uuids()
+        uuid_lookup = tvm.asset_ip_uuids()
         
         # inject a tenable uuid for matching IP address in the ASM DataFrame
         asm_df['uuid'] = asm_df['bd.ip_address'].map(lambda ip: uuid_lookup.get(ip))
     
         # import discovered assets from ASM 
         tvm.import_assets(asm_df)
-
+        # allow time to process new import
+        time.sleep(600)
         tvm.update_tags(asm_df)
 
         # matching_uuids = asm_df[~asm_df['uuid'].isna()]['bd.ip_address']
@@ -182,13 +181,13 @@ def correlate_records(tvm, asm):
 def main():
 
         tvm = TVM(tio=TenableIO(), source='crowd')
-        asm = ASM(asm_token=BB_ASM_TOKEN, limit=8000)
+        asm = ASM(asm_token=ASM_TOKEN, limit=500)
 
         correlate_records(tvm, asm)
 
 
 def download_asm(): 
-    asm = ASM(asm_token=SP_ASM_TOKEN)
+    asm = ASM(asm_token=ASM_TOKEN)
     return asm.get_asm_inventory_records()
 
 def remove_commas(df: pd.DataFrame, columns: list):
