@@ -100,7 +100,10 @@ class TVM:
 
     def import_assets(self, asm_df):
         now = int(time.time())
-        discovered_ips = asm_df[asm_df['uuid'].isna()]
+        if 'uuid' in asm_df.columns:
+            discovered_ips = asm_df[asm_df['uuid'].isna()]
+        else:
+            discovered_ips = asm_df
         discovered_ips = discovered_ips.groupby('bd.ip_address').first().reset_index()
         discovered_ips.to_csv(f'{now}_discovered_ips.csv')
 
@@ -161,11 +164,19 @@ class TVM:
 def correlate_records(tvm, asm):
         asm_df = asm.get_asm_inventory_records()
     
-        # import discovered assets from ASM 
+        
+        # check for existing assets in TVM
+        uuid_lookup = tvm.asset_ip_uuids()
+        # inject a tenable uuid for matching IP address in the ASM DataFrame
+        asm_df['uuid'] = asm_df['bd.ip_address'].map(lambda ip: uuid_lookup.get(ip))
+
+        # import discovered assets from ASM not in TVM
         tvm.import_assets(asm_df)
 
         # allow time to process new import
         time.sleep(600)
+
+        # refresh uuid table
         uuid_lookup = tvm.asset_ip_uuids()
         
         # inject a tenable uuid for matching IP address in the ASM DataFrame
