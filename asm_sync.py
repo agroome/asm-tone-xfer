@@ -161,21 +161,30 @@ class TVM:
 def correlate_records(tvm, asm):
         asm_df = asm.get_asm_inventory_records()
     
+        # import discovered assets from ASM 
+        tvm.import_assets(asm_df)
+
+        # allow time to process new import
+        time.sleep(600)
         uuid_lookup = tvm.asset_ip_uuids()
         
         # inject a tenable uuid for matching IP address in the ASM DataFrame
         asm_df['uuid'] = asm_df['bd.ip_address'].map(lambda ip: uuid_lookup.get(ip))
-    
-        # import discovered assets from ASM 
-        tvm.import_assets(asm_df)
-        # allow time to process new import
-        time.sleep(600)
+
         tvm.update_tags(asm_df)
 
+    
         # matching_uuids = asm_df[~asm_df['uuid'].isna()]['bd.ip_address']
         # print(f'{len(matching_uuids)} ASM IPs with an asset uuid')
 
         return asm_df
+
+
+def remove_commas(df: pd.DataFrame, columns: list):
+    '''remove commas from values in specified columns'''
+    for column in columns:
+        # replace nan with empty string replace commas with spaces
+        df[column] = df[column].fillna('').map(lambda x: x.replace(',', ' '))
 
 
 def main():
@@ -186,16 +195,9 @@ def main():
         correlate_records(tvm, asm)
 
 
-def download_asm(): 
-    asm = ASM(asm_token=ASM_TOKEN)
-    return asm.get_asm_inventory_records()
-
-def remove_commas(df: pd.DataFrame, columns: list):
-    '''remove commas from values in specified columns'''
-    for column in columns:
-        # replace nan with empty string replace commas with spaces
-        df[column] = df[column].fillna('').map(lambda x: x.replace(',', ' '))
-
+# def download_asm(): 
+#     asm = ASM(asm_token=ASM_TOKEN)
+#     return asm.get_asm_inventory_records()
 
 if __name__ == "__main__":
     main()
