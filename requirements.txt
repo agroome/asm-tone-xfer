@@ -1,3 +1,4 @@
+click
 pandas
 pytenable
-python-env
+python-dotenv

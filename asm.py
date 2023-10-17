@@ -49,21 +49,22 @@ class ASM:
         record_filter= [
             {'column': 'bd.record_type', 'type': 'is', 'value': 'A'}
         ]
-        column_list = ','.join(set(self.inventory_columns) | set(self.tag_index.values()))
+        # column_list = ','.join(set(self.inventory_columns) | set(self.tag_index.values()))
+        column_list = ','.join(set(self.inventory_columns) | set(self.tag_index))
         print(f'column_list: {column_list}')
 
         inventory = self.get_inventory(column_list, offset=0, limit=limit, filters=record_filter) 
 
         # load dataframe and rename the tag columns to readable name
         df = pd.DataFrame.from_records(inventory['assets']).rename(columns=self.tag_index)
-        print(f'column_list: {column_list}\n')
-        print(f'df columns: {list(df)}')
+        # print(f'column_list: {column_list}\n')
+        # print(f'df columns: {list(df)}')
 
         # replace any commas in keyword_tag values with an empty string
         for column in set(self.tag_index.values()):
             if column in df.columns:
                 df[column] = df[column].fillna('').map(lambda x: x.replace(',', ' '))
             else:
-                print("ASM records have no data in column: {column}")
+                print(f"ASM records have no data in column: {column}")
 
         return df

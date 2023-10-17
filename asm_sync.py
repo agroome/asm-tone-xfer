@@ -1,4 +1,7 @@
+import click
+import os
 import time
+import requests
 from dotenv import load_dotenv
 from pprint import pprint
 from tenable.io import TenableIO
@@ -45,22 +48,42 @@ def correlate_tags(tvm: TVM, asm: ASM, inventory_tags=None, excluded_tags=None):
     tvm.update_tags(asm.inventory, tag_categories)
 
 
-def main():
+
+@click.group()
+def cli():
+    pass
+
+@cli.command()
+def list_inventories() -> list[dict]:
+        asm_token = os.getenv('PRIMARY_ASM_TOKEN')
+        url = 'https://asm-demo.cloud.tenable.com/api/1.0/inventories/list?offset=0&limit=25&sortorder=true&include_suggestion_count=false'
+        # url_params = f'offset={offset}&limit={limit}&sortorder=true&sortorder=true&include_suggestion_count=false'
+        # url_params = f'?offset=0&limit=25&sortorder=true&include_suggestion_count=false'
+        headers = {'accept': 'application/json', 'Authorization': asm_token}
+        response = requests.get(f'{url}', headers=headers)
+        return response.json()
+
+@cli.command('sync')
+@click.argument('tio_source')
+@click.option('--limit', default=10000, help='limit the number of assets to import')
+def main(tio_source, limit):
     inventory_columns = [
-        'bd.ip_address', 'ipgeo.asn', 'ports.ports', 'bd.original_hostname', 'bd.host'
+        'bd.ip_address', 'ports.ports', 'bd.original_hostname', 'bd.host'
+        # 'bd.ip_address', 'ipgeo.asn', 'ports.ports', 'bd.original_hostname', 'bd.host'
     ]
-    tio_source = 'spsource_new'
+    # tio_source = 'Blackbaud Inventory Test'
     
     print("downloading ASM inventory ...")
-    asm = ASM(inventory_columns, limit=500)
+    asm = ASM(inventory_columns, limit=limit)
     tvm = TVM(tio=TenableIO(), source=tio_source)
 
     print(f'saving {len(asm.inventory)} ASM assets to asm_inventory.csv ...')
     asm.inventory.to_csv('asm_inventory.csv')
     print(f'Correlating ASM assets with Tenable VM[{tio_source}] ...\n')
     correlate_assets(tvm, asm)
-    print(f'found in TIO[{tio_source}]: {len(asm.inventory[~asm.inventory.uuid.isna()])}')
-    print(f'not found in TVM[{tio_source}]: {len(asm.inventory[asm.inventory.uuid.isna()])}\n')
+    print(f'found matching assets in TIO[{tio_source}]: {len(asm.inventory[~asm.inventory.uuid.isna()])}')
+    print(f'importing assets not found in TVM[{tio_source}]: {len(asm.inventory[asm.inventory.uuid.isna()])}\n')
+    print("waiting 10 minutes for import to process ...")
 
     # allow time to process new import
     time.sleep(600)
@@ -68,17 +91,20 @@ def main():
     print(f'Updating Tenable VM [{tio_source}] with ASM tags...\n')
     correlate_tags(tvm, asm, inventory_tags=['ipgeo.asn'], excluded_tags=['SP-ASM'])
 
-def update_tags():
+def update_tags(tio_source):
     inventory_columns = [
         'bd.ip_address', 'ipgeo.asn', 'ports.ports', 'bd.original_hostname', 'bd.host'
     ]
-    tio_source = 'spsource_new'
     
     print("downloading ASM inventory ...")
-    asm = ASM(inventory_columns, limit=500)
+    asm = ASM(inventory_columns, limit=10000)
     tvm = TVM(tio=TenableIO(), source=tio_source)
-    correlate_tags(tvm, asm, inventory_tags=['ipgeo.asn'], excluded_tags=['SP-ASM'])
+    # correlate_tags(tvm, asm, inventory_tags=['ipgeo.asn'], excluded_tags=['SP-ASM'])
+    correlate_tags(tvm, asm, excluded_tags=['SP-ASM'])
 
 if __name__ == "__main__":
     # main()
-    update_tags()
+    # tio_source = 'Blackbaud Inventory Test'
+    # update_tags(tio_source='Blackbaud Inventory Test')
+    # cli(['sync', 'Blackbaud Inventory Test'])
+    cli()
