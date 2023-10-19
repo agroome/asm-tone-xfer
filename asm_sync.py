@@ -103,8 +103,4 @@ def update_tags(tio_source):
     correlate_tags(tvm, asm, excluded_tags=['SP-ASM'])
 
 if __name__ == "__main__":
-    # main()
-    # tio_source = 'Blackbaud Inventory Test'
-    # update_tags(tio_source='Blackbaud Inventory Test')
-    # cli(['sync', 'Blackbaud Inventory Test'])
     cli()
