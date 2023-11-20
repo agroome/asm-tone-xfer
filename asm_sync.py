@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 from pprint import pprint
 from tenable.io import TenableIO
 
+from asm import ASM
+from tvm import TVM
+
 load_dotenv()
 tio = TenableIO()
 
@@ -105,6 +108,37 @@ def update_assets(inventory, source, columns):
         print('no new assets to import')
 
 
+def update_tags(tvm: TVM, asm: ASM, inventory_tags=None, excluded_tags=None):
+    '''update TVM assets with ASM tags
+
+    Args: 
+        tvm: TVM object
+        asm: ASM object
+        inventory_tags: list of ASM inventory properties to use as tags
+    '''
+    if inventory_tags is None:
+        inventory_tags = []
+    if excluded_tags is None:
+        excluded_tags = []
+
+    # inject a tenable uuid for matching IP address in the ASM DataFrame
+    uuid_lookup = tvm.asset_ip_uuids()
+    asm.inventory['uuid'] = asm.inventory['bd.ip_address'].map(lambda ip: uuid_lookup.get(ip))
+
+    # remove excluded tags from the list of custom keyword tags in ASM
+    custom_keyword_tags = set(asm.tag_index.values()) - set(excluded_tags)
+    tag_categories = custom_keyword_tags | set(inventory_tags)
+
+    # print(f'keyword tags: {asm.tag_index}')
+    # print(f'inventory properties: {inventory_properties}')
+    # print(f'excluded tags: {excluded_tags}')
+    # print(f'tag categories: {tag_categories}')
+
+    # asm.update_uuid_values(uuid_lookup)
+        
+    tvm.update_tags(asm.inventory, tag_categories)
+
+
 def list_inventories(primary_asm_token) -> list[dict]:
         url = 'https://asm-demo.cloud.tenable.com/api/1.0/inventories/list?offset=0&limit=100&sortorder=true&include_suggestion_count=false'
         headers = {'accept': 'application/json', 'Authorization': primary_asm_token}
@@ -136,6 +170,26 @@ def sync_assets(inventory, source):
     print(f'syncing ASM inventory: {inventory["inventory_name"]} with Tenable VM[{source}] ...')
     columns = 'bd.original_hostname,bd.host,bd.ip_address,bd.tags,bd.record_type'
     update_assets(inventory, source, columns)
+
+
+@cli.command('tags')
+@click.option('--inventory', 
+              type=click.Choice([inventory['inventory_name'] for inventory in asm_inventories]), 
+              help='ASM inventory name')
+@click.option('--source', help='Tenable VM source name', default='external')
+def sync_tags(inventory, source):
+
+    inventory_index = {inventory['inventory_name']: inventory for inventory in asm_inventories}
+    inventory = inventory_index[inventory]
+
+    print(f'syncing ASM inventory tags: {inventory["inventory_name"]} with Tenable VM[{source}] ...')
+    # columns = 'bd.original_hostname,bd.host,bd.ip_address,bd.tags,bd.record_type'
+    columns = ['bd.original_hostname', 'bd.host', 'bd.ip_address', 'bd.tags', 'bd.record_type']
+
+    asm = ASM(columns, inventory['api_key'])
+    tvm = TVM(tio=TenableIO(), source=source)
+    
+    update_tags(tvm, asm)
 
 
 if __name__ == '__main__':
