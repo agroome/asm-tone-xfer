@@ -18,3 +18,5 @@ ASM_TOKEN=paste_your_auth_token_here
 TIO_ACCESS_KEY=paste_your_access_key_here
 TIO_SECRET_KEY=paste_your_secret_key_here
 ```
+
+Run with --help for parameters
