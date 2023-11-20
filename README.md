@@ -1,6 +1,6 @@
 # asm_sync
 
-Transfer assets and tags from Tenable.asm to Tenable.io
+Transfer assets from Tenable.asm to Tenable.io (tag transfer was removed and will added back on next code merge)
 
 This is alpha code for example purposes only. Additional documentation may to follow. This is provided under an MIT license and not supported by Tenable.
 
